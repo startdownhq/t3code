@@ -30,7 +30,8 @@ handoffs exist upstream).
 
 1. **Done gate.** A `t3.json` script flag (say `runOnTurnEnd: true`) that runs the project's checks when an agent
    turn ends. On a non-zero exit the output goes back to the agent as the next turn, with a retry cap; the thread
-   shows the command and its output as evidence. Sources: Claude Code best practices (give Claude a check it can
+   shows the command and its output as evidence. Upstream's nearest flag, `runOnSettle`, only runs cleanup when a
+   thread settles (often days later) and never reports back to the agent. Sources: Claude Code best practices (give Claude a check it can
    run); Boris Cherny (verification loop = 2-3x quality); Lauren Tan (every correction becomes a check).
 2. **Fresh-reviewer action.** One button sends the thread's diff and its stated goal to a read-only agent that never
    saw the conversation; findings come back into the thread. Sources: Claude Code best practices; Anthropic
