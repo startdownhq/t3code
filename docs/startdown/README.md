@@ -10,6 +10,8 @@ not take feature PRs from outside its team (see `CONTRIBUTING.md`), so harness f
   `vp run check:changed`, then push. Merge, never rebase or force-push `main`: other engineers build on it.
 - Keep our changes small and in their own files where possible, so merges stay cheap. Every fork-only change gets a
   line in the change log below.
+- GitHub Actions: no workflow has run on the fork yet. If Actions get enabled, turn on `ci.yml` only; the release,
+  deploy-relay, mobile-eas and publish-aur workflows publish upstream's products and must stay off.
 - Bug fixes that are not StartDown-specific go upstream as an issue first (their rules), not as a fork patch.
 
 ## Where it runs
