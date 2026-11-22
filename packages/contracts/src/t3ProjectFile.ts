@@ -47,6 +47,12 @@ export const T3ProjectFileScript = Schema.Struct({
         "When true, the script runs in the thread's worktree each time the thread settles, for example to delete build output. Threads without their own worktree skip it.",
     }),
   ),
+  runOnTurnEnd: Schema.optionalKey(
+    Schema.Boolean.annotate({
+      description:
+        "When true, the script runs in the thread's checkout each time an agent turn completes. If it exits non-zero, T3 sends its output back to the agent to fix, up to 3 times in a row.",
+    }),
+  ),
   stopOnSettle: Schema.optionalKey(
     Schema.Boolean.annotate({
       description:

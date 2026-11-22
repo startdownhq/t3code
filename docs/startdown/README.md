@@ -16,10 +16,10 @@ not take feature PRs from outside its team (see `CONTRIBUTING.md`), so harness f
 
 ## Where it runs
 
-| Machine | Today | Target |
-|---|---|---|
-| Mac Mini | upstream release 0.1.7 (`~/.t3/runtime/versions`) | fork build |
-| jiv-server | upstream release 0.1.9, `t3code.service` | fork build |
+| Machine    | Today                                             | Target     |
+| ---------- | ------------------------------------------------- | ---------- |
+| Mac Mini   | upstream release 0.1.7 (`~/.t3/runtime/versions`) | fork build |
+| jiv-server | upstream release 0.1.9, `t3code.service`          | fork build |
 
 Both still run upstream binaries. Switching a machine to a fork build is a separate, tested step.
 
@@ -66,3 +66,4 @@ No official SpaceX tutorial on Claude was found; Tan's talk is the closest prima
 ## Fork change log
 
 - 2026-11-22: forked; added this file.
+- 2026-11-22: done gate (`runOnTurnEnd` project script, `DoneGateService`), branch `feat/done-gate`.

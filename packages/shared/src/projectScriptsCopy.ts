@@ -13,5 +13,6 @@ export function projectScriptMenuLabel(
   }
   if (script.runOnWorktreeCreate) return resolve(msg("{name} (setup)", { name }));
   if (script.runOnSettle) return resolve(msg("{name} (on settle)", { name }));
+  if (script.runOnTurnEnd) return resolve(msg("{name} (after each turn)", { name }));
   return name;
 }
