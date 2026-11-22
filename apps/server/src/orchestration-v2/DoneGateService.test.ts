@@ -101,6 +101,12 @@ function run(
   } satisfies OrchestrationV2Run;
 }
 
+const forkLineage = {
+  rootThreadId: ThreadId.make("parent"),
+  parentThreadId: ThreadId.make("parent"),
+  relationshipToParent: "fork",
+} as const;
+
 const fixRun = (ordinal: number) =>
   run(ordinal, doneGateFixMessageId(threadId, RunId.make(`run-${ordinal - 1}`)));
 
@@ -150,6 +156,10 @@ interface Scenario {
   readonly runsAfterCheck?: ReadonlyArray<OrchestrationV2Run>;
   readonly exitCode?: number | null | "never";
   readonly output?: ReadonlyArray<string>;
+  /** After the first check ends, the run completes again, then another thread's run completes. */
+  readonly repeatAfterCheck?: boolean;
+  /** The parent thread's checkout, when the checked thread has one. */
+  readonly parentWorktreePath?: string | null;
 }
 
 const runGate = (scenario: Scenario) =>
@@ -159,15 +169,21 @@ const runGate = (scenario: Scenario) =>
     const written: OrchestrationV2DomainEvent[] = [];
     const scriptRuns: ProjectSetupScriptRunner.ProjectSetupScriptRunnerInput[] = [];
     let reads = 0;
+    const firstCheckDone = yield* Deferred.make<void>();
     const done = yield* Deferred.make<void>();
     const checkStarted = yield* Deferred.make<void>();
+    const expectedChecks = scenario.repeatAfterCheck === true ? 2 : 1;
+    let checksEnded = 0;
     const tracer = Tracer.make({
       span(options) {
         const span = new Tracer.NativeSpan(options);
         const end = span.end.bind(span);
         span.end = (...args) => {
           end(...args);
-          if (span.name === "DoneGateService.check") Deferred.doneUnsafe(done, Effect.void);
+          if (span.name !== "DoneGateService.check") return;
+          checksEnded++;
+          Deferred.doneUnsafe(firstCheckDone, Effect.void);
+          if (checksEnded === expectedChecks) Deferred.doneUnsafe(done, Effect.void);
         };
         return span;
       },
@@ -182,16 +198,27 @@ const runGate = (scenario: Scenario) =>
       updatedAt: NOW,
     };
     const exitCode = scenario.exitCode === undefined ? 0 : scenario.exitCode;
+    const completed = (id: ThreadId) => ({
+      id: EventId.make(`gate-completed-${id}`),
+      type: "run.updated" as const,
+      threadId: id,
+      runId: checked.id,
+      occurredAt: at(),
+      payload: { ...checked, threadId: id },
+    });
     const dependencies = Layer.mergeAll(
       Layer.mock(Orchestrator.OrchestratorV2)({
-        streamDomainEvents: Stream.make({
-          id: EventId.make("gate-completed"),
-          type: "run.updated",
-          threadId,
-          runId: checked.id,
-          occurredAt: at(),
-          payload: checked,
-        }),
+        streamDomainEvents: Stream.make(completed(threadId)).pipe(
+          Stream.concat(
+            scenario.repeatAfterCheck === true
+              ? Stream.fromEffect(Deferred.await(firstCheckDone)).pipe(
+                  Stream.flatMap(() =>
+                    Stream.make(completed(threadId), completed(ThreadId.make("other-thread"))),
+                  ),
+                )
+              : Stream.empty,
+          ),
+        ),
         dispatch: (command) =>
           Effect.sync(() => {
             dispatched.push(command);
@@ -199,7 +226,14 @@ const runGate = (scenario: Scenario) =>
           }),
       }),
       Layer.mock(ProjectionStore.ProjectionStoreV2)({
-        getThread: () => Effect.succeed({ ...thread, ...scenario.thread }),
+        getThread: (id) =>
+          Effect.succeed(
+            id === threadId
+              ? { ...thread, ...scenario.thread }
+              : id === ThreadId.make("parent")
+                ? { ...thread, id, worktreePath: scenario.parentWorktreePath ?? null }
+                : { ...thread, id },
+          ),
         getThreadRecords: (() =>
           Effect.sync(() => ({
             runs: reads++ === 0 ? scenario.runs : (scenario.runsAfterCheck ?? scenario.runs),
@@ -333,6 +367,27 @@ describe("DoneGateService", () => {
     }),
   );
 
+  it.effect("checks a run once even when it completes again later", () =>
+    Effect.gen(function* () {
+      const result = yield* runGate({ runs: [run(1, "message-1")], repeatAfterCheck: true });
+      expect(result.scriptRuns.map((input) => input.threadId)).toEqual([
+        threadId,
+        ThreadId.make("other-thread"),
+      ]);
+    }),
+  );
+
+  it.effect("checks a fork in its own worktree", () =>
+    Effect.gen(function* () {
+      const result = yield* runGate({
+        runs: [run(1, "message-1")],
+        thread: { lineage: { ...forkLineage } },
+        parentWorktreePath: "/workspace/parent",
+      });
+      expect(result.scriptRuns).toMatchObject([{ worktreePath: "/workspace/worktree" }]);
+    }),
+  );
+
   it.effect("drops the result when the user moved on during the check", () =>
     Effect.gen(function* () {
       const result = yield* runGate({
@@ -367,6 +422,12 @@ describe("DoneGateService", () => {
   it.effect.each([
     { name: "no turn-end script", scripts: [{ ...gateScript, runOnTurnEnd: false }] },
     { name: "an archived thread", thread: { archivedAt: at() } },
+    { name: "a side chat", thread: { lineage: { ...forkLineage, sideChat: true } } },
+    {
+      name: "a fork sharing its parent's checkout",
+      thread: { lineage: forkLineage },
+      parentWorktreePath: "/workspace/worktree",
+    },
     {
       name: "a provider-native subagent",
       thread: {

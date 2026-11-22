@@ -88,7 +88,8 @@ export const make = Effect.gen(function* () {
 
   const latestFixTurns = (threadId: ThreadId, runId: RunId) =>
     projections
-      .getThreadRecords(threadId, ["runs"], { latestRunLimit: DONE_GATE_MAX_FIX_TURNS + 1 })
+      // Headroom for runs cancelled before they started, which the count skips.
+      .getThreadRecords(threadId, ["runs"], { latestRunLimit: DONE_GATE_MAX_FIX_TURNS * 3 })
       .pipe(Effect.map((records) => doneGateFixTurnsBefore(records.runs, runId)));
 
   const check = Effect.fn("DoneGateService.check")(
@@ -106,11 +107,10 @@ export const make = Effect.gen(function* () {
       const scripts = resolveProjectScripts(yield* settings.getSettings, project);
       if (turnEndProjectScript(scripts) === null) return;
       const cwd = thread.worktreePath ?? project.workspaceRoot;
-      // The parent checks its own checkout; a child sharing it would run the same check twice.
-      if (
-        thread.lineage.relationshipToParent === "subagent" &&
-        thread.lineage.parentThreadId !== null
-      ) {
+      // A side chat answers questions; its parent owns the checkout and the fixes.
+      if (thread.lineage.sideChat === true) return;
+      // The parent checks its own checkout; a fork or child sharing it would edit under the parent.
+      if (thread.lineage.parentThreadId !== null) {
         const parent = yield* projections
           .getThread(thread.lineage.parentThreadId)
           .pipe(
@@ -217,27 +217,18 @@ export const make = Effect.gen(function* () {
   const start = Effect.fn("DoneGateService.start")(function* () {
     // Keyed by thread: a newer completed run replaces a check still running for an older one.
     const checks = yield* FiberMap.make<ThreadId>();
-    const checking = new Map<ThreadId, RunId>();
+    // The last run checked per thread. Completed runs are re-emitted (delegated completions),
+    // and none of those may run the script again.
+    const checked = new Map<ThreadId, RunId>();
     yield* forkParked(
       Stream.runForEach(orchestrator.streamDomainEvents, (event) => {
         if (event.type !== "run.updated" || event.payload.status !== "completed")
           return Effect.void;
         const { threadId } = event;
         const runId = event.payload.id;
-        // Duplicate events for the run being checked must not restart its script.
-        if (checking.get(threadId) === runId) return Effect.void;
-        checking.set(threadId, runId);
-        return FiberMap.run(
-          checks,
-          threadId,
-          check(threadId, runId).pipe(
-            Effect.ensuring(
-              Effect.sync(() => {
-                if (checking.get(threadId) === runId) checking.delete(threadId);
-              }),
-            ),
-          ),
-        );
+        if (checked.get(threadId) === runId) return Effect.void;
+        checked.set(threadId, runId);
+        return FiberMap.run(checks, threadId, check(threadId, runId));
       }),
     );
   });

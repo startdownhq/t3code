@@ -508,9 +508,21 @@ export const make = Effect.gen(function* () {
 
     // Earlier settle shells may still run foreground programs; do not type resumed settles into them.
     const terminalId =
-      trigger === "setup"
-        ? `setup-${script.id}`
-        : `${trigger}-${script.id}-${(yield* random.uuidV4()).slice(0, 8)}`;
+      trigger === "settle"
+        ? `settle-${script.id}-${(yield* random.uuidV4()).slice(0, 8)}`
+        : `${trigger}-${script.id}`;
+    if (trigger === "turn-end") {
+      // Each turn's check replaces the last one: stop it if it still runs, and keep one terminal.
+      yield* terminalManager.close({ threadId: input.threadId, terminalId }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning("previous turn-end check terminal was not closed", {
+            ...errorContext,
+            terminalId,
+            cause,
+          }),
+        ),
+      );
+    }
     const cwd = input.worktreePath;
     const env = {
       ...projectScriptRuntimeEnv({
