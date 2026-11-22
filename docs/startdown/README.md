@@ -19,9 +19,30 @@ not take feature PRs from outside its team (see `CONTRIBUTING.md`), so harness f
 | Machine    | Today                                             | Target     |
 | ---------- | ------------------------------------------------- | ---------- |
 | Mac Mini   | upstream release 0.1.7 (`~/.t3/runtime/versions`) | fork build |
-| jiv-server | upstream release 0.1.9, `t3code.service`          | fork build |
+| jiv-server | fork build 0.1.12-startdown.1 (2026-11-22), `t3code.service` | fork build |
 
 Both still run upstream binaries. Switching a machine to a fork build is a separate, tested step.
+
+## Deploying a fork build (Linux)
+
+1. Pick a version above upstream's latest stable, with our tag: `0.1.12-startdown.N`. It must not match
+   `-(nightly|preview).YYYYMMDD.N`, or T3 treats it as another release track.
+2. Build: `ssh jiblars@192.168.193.182 'bash -s -- <version>' < scripts/startdown/build-linux-runtime.sh`
+   (about 25 minutes; ends with the upstream smoke test).
+3. Switch, with the service stopped: back up `~/.t3/userdata`, the unit file and
+   `~/.t3/runtime/service-state.json`; unpack the archive's folder to `~/.t3/runtime/versions/<version>`;
+   write `<version>` (no newline) to `.install-complete` in it; set `activeVersion` in service-state.json;
+   point the unit's `ExecStart` at the new `t3`; `systemctl --user daemon-reload`; start.
+4. Check: `serverVersion` in `~/.t3/userdata/server-runtime.json`, then a real turn with
+   `t3 thread start <dir> "Reply with exactly: ok" --provider claudeAgent --model <model> --wait --json`.
+
+Traps:
+- A distro Node (CachyOS `/usr/bin/node`) builds an executable that links system libraries; build in the
+  container. `build-cli-archive.ts` also needs `dpkg-query` and `libatomic1`, which the container has.
+- Without `.install-complete` the launcher refuses the runtime ("missing or incomplete").
+- On start the server deletes runtimes it no longer uses, including the one you switched from. Keep the
+  previous release archive in the backup folder (download it from the pingdotgg/t3code release).
+- "Update everything" in any T3 client connected to the server installs upstream's release over ours.
 
 ## Roadmap (from Anthropic and SpaceX AI engineering guidance)
 
@@ -67,3 +88,4 @@ No official SpaceX tutorial on Claude was found; Tan's talk is the closest prima
 
 - 2026-11-22: forked; added this file.
 - 2026-11-22: done gate (`runOnTurnEnd` project script, `DoneGateService`), merged in PR #1.
+- 2026-11-22: jiv-server runs fork build 0.1.12-startdown.1; build script `scripts/startdown/build-linux-runtime.sh`.
