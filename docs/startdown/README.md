@@ -19,7 +19,7 @@ not take feature PRs from outside its team (see `CONTRIBUTING.md`), so harness f
 | Machine    | Today                                             | Target     |
 | ---------- | ------------------------------------------------- | ---------- |
 | Mac Mini   | upstream release 0.1.7 (`~/.t3/runtime/versions`) | fork build |
-| jiv-server | fork build 0.1.12-startdown.1 (2026-11-22), `t3code.service` | fork build |
+| jiv-server | upstream release 0.1.9 (fork build rolled back 2026-11-22), `t3code.service` | fork build |
 
 Both still run upstream binaries. Switching a machine to a fork build is a separate, tested step.
 
@@ -37,6 +37,11 @@ Both still run upstream binaries. Switching a machine to a fork build is a separ
    `t3 thread start <dir> "Reply with exactly: ok" --provider claudeAgent --model <model> --wait --json`.
 
 Traps:
+- **T3 Connect is configured at build time.** Without `T3CODE_RELAY_URL`, `T3CODE_CLERK_PUBLISHABLE_KEY`,
+  `T3CODE_CLERK_JWT_TEMPLATE` and `T3CODE_CLERK_CLI_OAUTH_CLIENT_ID` in the build env (public values in
+  `.env.example`), the server runs locally but never starts its relay: app.t3.codes and phones cannot reach
+  it. This took jiv-server down for remote users 21:30-22:10 on 2026-11-22. Before switching, the smoke run
+  must log "Relay client process started" and "T3 Connect is reachable"; after switching, check the same lines.
 - A distro Node (CachyOS `/usr/bin/node`) builds an executable that links system libraries; build in the
   container. `build-cli-archive.ts` also needs `dpkg-query` and `libatomic1`, which the container has.
 - Without `.install-complete` the launcher refuses the runtime ("missing or incomplete").
@@ -88,4 +93,4 @@ No official SpaceX tutorial on Claude was found; Tan's talk is the closest prima
 
 - 2026-11-22: forked; added this file.
 - 2026-11-22: done gate (`runOnTurnEnd` project script, `DoneGateService`), merged in PR #1.
-- 2026-11-22: jiv-server runs fork build 0.1.12-startdown.1; build script `scripts/startdown/build-linux-runtime.sh`.
+- 2026-11-22: deployed fork build 0.1.12-startdown.1 to jiv-server; it had no T3 Connect (missing build env), rolled back to 0.1.9 at 22:11. Build script `scripts/startdown/build-linux-runtime.sh` must not be used for a deploy until it sets the relay env.
