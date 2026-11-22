@@ -35,7 +35,14 @@ const createFixtureSource = Effect.fn("createMigrateDevDbFixtureSource")(functio
       yield* runMigrations({ toMigrationInclusive });
 
       const scripts = JSON.stringify([
-        { id: "lint", name: "Lint", command: "vp lint", icon: "lint", runOnWorktreeCreate: false },
+        {
+          id: "lint",
+          name: "Lint",
+          command: "vp lint",
+          icon: "lint",
+          runOnWorktreeCreate: false,
+          runOnTurnEnd: true,
+        },
         {
           id: "teardown",
           name: "Teardown",
@@ -232,7 +239,7 @@ it.layer(NodeServices.layer)("migrate-dev-db", (it) => {
             runOnWorktreeCreate: false,
           },
         ],
-        "copied project scripts stay listed but never run on settle in the original checkout",
+        "copied project scripts stay listed but never run on settle or turn end in the original checkout",
       );
       assert.deepStrictEqual(kept.leftovers, {
         auth: 0,

@@ -11,6 +11,7 @@ import {
   ORCHESTRATION_PROTOCOL_VERSION,
   type ProjectMutation,
   ProjectId,
+  type ProjectScript,
   WsRpcGroup,
 } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
@@ -34,6 +35,7 @@ export interface T3State {
   readonly project: (
     title: string,
     files?: Readonly<Record<string, string | Uint8Array>>,
+    scripts?: ReadonlyArray<ProjectScript>,
   ) => Promise<string>;
   /**
    * Starts a thread in a project and plays one replayed turn per message before returning.
@@ -156,6 +158,7 @@ export function makeState(home: string, env: NodeJS.ProcessEnv = {}) {
   const project = Effect.fn("scenario.project")(function* (
     title: string,
     files: Readonly<Record<string, string | Uint8Array>>,
+    scripts?: ReadonlyArray<ProjectScript>,
   ) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -183,6 +186,7 @@ export function makeState(home: string, env: NodeJS.ProcessEnv = {}) {
       projectId: ProjectId.make(yield* uuid),
       title,
       workspaceRoot: workspace,
+      ...(scripts === undefined ? {} : { scripts }),
     });
     projects.push(created.id);
     return workspace;
@@ -208,7 +212,7 @@ export function makeState(home: string, env: NodeJS.ProcessEnv = {}) {
   return {
     cli,
     state: {
-      project: (title, files = {}) => runPromise(project(title, files)),
+      project: (title, files = {}, scripts) => runPromise(project(title, files, scripts)),
       thread: (input) => runPromise(thread(input)),
     } satisfies T3State,
     // The server outlives the test, so the next one must not see this one's projects.

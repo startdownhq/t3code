@@ -6,6 +6,7 @@ import {
   resolveProjectScripts,
   settleProjectScript,
   setupProjectScript,
+  turnEndProjectScript,
 } from "@t3tools/shared/projectScripts";
 
 import * as Clock from "effect/Clock";
@@ -66,7 +67,7 @@ export interface ProjectSetupScriptRunnerInput {
   readonly projectId?: string;
   readonly projectCwd?: string;
   readonly worktreePath: string;
-  readonly trigger?: "setup" | "settle";
+  readonly trigger?: "setup" | "settle" | "turn-end";
   readonly project?: {
     readonly id: ProjectId;
     readonly workspaceRoot: string;
@@ -494,7 +495,11 @@ export const make = Effect.gen(function* () {
     const trigger = input.trigger ?? "setup";
     const scripts = resolveProjectScripts(settings, project);
     const script =
-      trigger === "settle" ? settleProjectScript(scripts) : setupProjectScript(scripts);
+      trigger === "settle"
+        ? settleProjectScript(scripts)
+        : trigger === "turn-end"
+          ? turnEndProjectScript(scripts)
+          : setupProjectScript(scripts);
     if (!script) {
       return {
         status: "no-script",
@@ -505,7 +510,19 @@ export const make = Effect.gen(function* () {
     const terminalId =
       trigger === "settle"
         ? `settle-${script.id}-${(yield* random.uuidV4()).slice(0, 8)}`
-        : `setup-${script.id}`;
+        : `${trigger}-${script.id}`;
+    if (trigger === "turn-end") {
+      // Each turn's check replaces the last one: stop it if it still runs, and keep one terminal.
+      yield* terminalManager.close({ threadId: input.threadId, terminalId }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.logWarning("previous turn-end check terminal was not closed", {
+            ...errorContext,
+            terminalId,
+            cause,
+          }),
+        ),
+      );
+    }
     const cwd = input.worktreePath;
     const env = {
       ...projectScriptRuntimeEnv({

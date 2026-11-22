@@ -5,6 +5,7 @@ import {
   ProjectId,
   TerminalNotRunningError,
   type TerminalEvent,
+  type TerminalCloseInput,
   type TerminalOpenInput,
   type TerminalSessionSnapshot,
 } from "@t3tools/contracts";
@@ -47,9 +48,11 @@ const makeHarness = Effect.fn(function* (options: {
   readonly history?: string;
   readonly opening?: Deferred.Deferred<void>;
   readonly shell?: string | null;
+  readonly trigger?: "setup" | "turn-end";
 }) {
   const listeners = new Set<(event: TerminalEvent) => Effect.Effect<void>>();
   const opens: TerminalOpenInput[] = [];
+  const closes: TerminalCloseInput[] = [];
   const writes = yield* Queue.unbounded<string>();
   const outputLines = yield* Queue.unbounded<string>();
   const terminals = Layer.mock(TerminalManager.TerminalManager)({
@@ -72,6 +75,7 @@ const makeHarness = Effect.fn(function* (options: {
         return () => listeners.delete(listener);
       }),
     write: (input) => Queue.offer(writes, input.data).pipe(Effect.asVoid),
+    close: (input) => Effect.sync(() => void closes.push(input)),
     closeIdle: () => Effect.void,
     closeOnSettle: () => Effect.void,
   });
@@ -91,6 +95,7 @@ const makeHarness = Effect.fn(function* (options: {
   const start = runner.runForThread({
     threadId,
     worktreePath: "/repo/.t3/worktrees/feature",
+    ...(options.trigger === undefined ? {} : { trigger: options.trigger }),
     observeCompletion: { onOutputLine: (line) => Queue.offer(outputLines, line) },
     project: {
       id: ProjectId.make("project-1"),
@@ -102,13 +107,14 @@ const makeHarness = Effect.fn(function* (options: {
           command: options.command ?? "vp i",
           icon: "configure",
           runOnWorktreeCreate: true,
+          runOnTurnEnd: true,
         },
       ],
     },
   });
   const emit = (terminalEvent: TerminalEvent) =>
     Effect.forEach([...listeners], (listener) => listener(terminalEvent), { discard: true });
-  return { start, listeners, writes, outputLines, emit, opens };
+  return { start, listeners, writes, outputLines, emit, opens, closes };
 });
 
 const setup = Effect.fn(function* (
@@ -126,6 +132,22 @@ const setup = Effect.fn(function* (
 });
 
 describe("ProjectSetupScriptRunner", () => {
+  it.effect("stops the previous turn-end check and reuses its terminal", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness({ trigger: "turn-end" });
+      yield* harness.start;
+      yield* harness.start;
+      expect(harness.closes).toEqual([
+        { threadId, terminalId: "turn-end-setup" },
+        { threadId, terminalId: "turn-end-setup" },
+      ]);
+      expect(harness.opens.map((open) => open.terminalId)).toEqual([
+        "turn-end-setup",
+        "turn-end-setup",
+      ]);
+    }),
+  );
+
   it.effect("keeps setup scripts independent of the interactive shell preference", () =>
     Effect.gen(function* () {
       const { opens } = yield* setup();

@@ -190,6 +190,14 @@ on each selected environment, and reset returns to the environment's shared list
 `t3.json` actions can be imported there. When a project has several checkouts on one environment,
 choose one in the scope line at the top to see or change only that checkout's settings.
 
+To check an agent's work when its turn ends, turn on **Run after each agent turn and send failures
+back to the agent** for one action, or set `"runOnTurnEnd": true` on a `t3.json` script. It runs in
+the thread's checkout after every completed turn. A non-zero exit sends the last lines of its output
+back to the agent as a new turn, at most three in a row. A pass, a stop at that limit, or a check
+still running after 15 minutes leaves a notice on the turn. If you send a message while the check
+runs, its result is dropped and your turn gets its own check. Keep the command fast, such as a check
+of changed files: it also runs after turns that only answer a question.
+
 Settings a repository can also declare in `t3.json`, such as the workspace for new threads,
 resolve in one order: a project override, then the environment setting, then `t3.json`, then the
 built-in default. Leave a setting on **Inherit** to let the next tier decide.

@@ -14,6 +14,7 @@ export interface ProjectScriptInput {
   readonly runOnWorktreeCreate: ProjectScript["runOnWorktreeCreate"];
   readonly waitForSetup: boolean;
   readonly runOnSettle: boolean;
+  readonly runOnTurnEnd?: boolean;
   readonly stopOnSettle?: boolean;
   readonly previewUrl: Exclude<ProjectScript["previewUrl"], undefined> | null;
   readonly autoOpenPreview: boolean;
@@ -28,6 +29,7 @@ export function buildProjectScript(id: string, input: ProjectScriptInput): Proje
     runOnWorktreeCreate: input.runOnWorktreeCreate,
     ...(input.runOnWorktreeCreate && input.waitForSetup ? { async: false } : {}),
     ...(input.runOnSettle ? { runOnSettle: true } : {}),
+    ...(input.runOnTurnEnd ? { runOnTurnEnd: true } : {}),
     ...(input.stopOnSettle ? { stopOnSettle: true } : {}),
     ...(input.previewUrl === null
       ? {}
@@ -44,11 +46,13 @@ export function releaseClaimedRoles(
 ): ProjectScript {
   const releaseSetup = saved.runOnWorktreeCreate && script.runOnWorktreeCreate;
   const releaseSettle = saved.runOnSettle && script.runOnSettle === true;
-  if (!releaseSetup && !releaseSettle) return script;
+  const releaseTurnEnd = saved.runOnTurnEnd === true && script.runOnTurnEnd === true;
+  if (!releaseSetup && !releaseSettle && !releaseTurnEnd) return script;
   return {
     ...script,
     ...(releaseSetup ? { runOnWorktreeCreate: false } : {}),
     ...(releaseSettle ? { runOnSettle: false } : {}),
+    ...(releaseTurnEnd ? { runOnTurnEnd: false } : {}),
   };
 }
 
@@ -103,6 +107,8 @@ export function nextProjectScriptId(name: string, existingIds: Iterable<string>)
 }
 
 export function primaryProjectScript(scripts: ReadonlyArray<ProjectScript>): ProjectScript | null {
-  const regular = scripts.find((script) => !script.runOnWorktreeCreate && !script.runOnSettle);
-  return regular ?? scripts.find((script) => !script.runOnSettle) ?? null;
+  const regular = scripts.find(
+    (script) => !script.runOnWorktreeCreate && !script.runOnSettle && !script.runOnTurnEnd,
+  );
+  return regular ?? scripts.find((script) => !script.runOnSettle && !script.runOnTurnEnd) ?? null;
 }

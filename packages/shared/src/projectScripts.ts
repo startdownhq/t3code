@@ -60,6 +60,10 @@ export function settleProjectScript(scripts: readonly ProjectScript[]): ProjectS
   return scripts.find((script) => script.runOnSettle === true) ?? null;
 }
 
+export function turnEndProjectScript(scripts: readonly ProjectScript[]): ProjectScript | null {
+  return scripts.find((script) => script.runOnTurnEnd === true) ?? null;
+}
+
 /**
  * Leading spaces omit scripts from Bash history with ignorespace/ignoreboth,
  * zsh with HIST_IGNORE_SPACE, and fish. Only the first line is prefixed, so later
