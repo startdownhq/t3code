@@ -66,4 +66,4 @@ No official SpaceX tutorial on Claude was found; Tan's talk is the closest prima
 ## Fork change log
 
 - 2026-11-22: forked; added this file.
-- 2026-11-22: done gate (`runOnTurnEnd` project script, `DoneGateService`), branch `feat/done-gate`.
+- 2026-11-22: done gate (`runOnTurnEnd` project script, `DoneGateService`), merged in PR #1.
